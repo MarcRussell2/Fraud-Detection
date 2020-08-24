@@ -198,9 +198,6 @@ For future improvements to the model, we would like to implement another class w
 
 Integration with the PostgreSQL server in order to maintain a database of flagged events.
 
-# #Analysis
-<p align="center">
-    <img src="images/pie.png" width="600"/>
 
 ## Citations
 
