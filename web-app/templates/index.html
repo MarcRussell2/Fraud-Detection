@@ -1,0 +1,56 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+
+  <meta charset="utf-8">
+
+  <title>Fraud Classifier</title>
+
+  <meta name="description" content="Flask Data Product - Fraud Classifier">
+  <meta name="author" content="fraudorama group">
+
+  <script type="text/javascript"
+  src="{{ url_for('static', filename='jquery.js') }}">
+  </script>
+
+</head>
+
+<body>
+
+  <h1>Fabulous Fraud Classifier</h1>
+  <p>This application consumes data from Galvanize fraud case study heroku app and will predict on fraudulent transactions.</p>
+  <button id = "score">Score</button>
+
+  <br>
+  
+  <pre>
+  <span id ="score"></span>
+  </pre>
+
+  <script type="text/javascript">
+    
+    let score_fraud = function() {
+        $.ajax({
+            url: "/score",
+            type: "POST",
+            data: JSON.stringify({}),
+            contentType: "application/text",
+            success: function(data){
+                console.log(data);
+                $("span#score").text(data);
+            }
+        });
+    }
+    
+    $(document).ready(function() {
+        $("button#score").click(function() {
+            score_fraud();
+        });
+    });
+    
+    </script>    
+    
+
+</body>
+</html>

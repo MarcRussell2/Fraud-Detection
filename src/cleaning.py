@@ -6,12 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk import word_tokenize
-from sklearn.cluster import KMeans
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score, recall_score, precision_score
-from sklearn.ensemble import RandomForestClassifier
+
 
 def clean_training_dataframe(raw_fp):
     '''
@@ -22,11 +17,11 @@ def clean_training_dataframe(raw_fp):
     '''
     df = pd.read_json(raw_fp)
     df['fraud'] = df['acct_type'].str.contains('fraud')
-    df_cleaned = df[['description', 'has_logo', 'listed', 'name', 'num_payouts', 'org_desc', 'user_age', 'user_type', 'fraud']]
+    df_cleaned = df[['description', 'has_logo', 'listed', 'name', 'num_payouts', 'org_desc', 'user_age', 'user_type', 'email_domain','fraud']]
     df_cleaned['org_description'] = (df_cleaned['org_desc']!='').astype(int)
     df_cleaned.drop('org_desc', axis=1, inplace=True)
     df_cleaned['listed']=(df_cleaned['listed']=='y').astype(int)
-    return df_cleaned
+    return df, df_cleaned
 
 def make_corpus(df_cleaned):
     '''
@@ -54,7 +49,8 @@ def prep_corpus(corpus):
     '''
     corpus_removepunc = []
     for c in corpus: 
-        corpus_removepunc.append(c.translate(str.maketrans('', '', string.punctuation)).lower()) 
+        #corpus_removepunc.append(c.translate(str.maketrans('', '', string.punctuation)).lower())
+        corpus_removepunc.append(c.translate(str.maketrans('', '', string.punctuation)))
     corpus = pd.Series(corpus_removepunc) 
     corpus = corpus.apply(lambda x: lemmatize_str(x, wordnet=True)) 
     return corpus
@@ -89,58 +85,28 @@ def get_top_features_cluster(tf_idf_array, prediction, n_feats):
     return dfs
 
 if __name__ == "__main__":
-    log_regression=True
-    randomforest = True
-    df = clean_training_dataframe('data/data.json') ## Entire dataset being trained
-    # print('Making corpus...')
-    # corpus = make_corpus(df)
-    # stop_words = set(stopwords.words('english'))
-    # extra = ['s', 'de', 'la', 'en', 'et', 'le', 'des', 'de la', 'les', 'vous', 'pour', 'rouen', 'us', 'dec', '00', '2013', '30', '10', 'us', 'www', 'new']
-    # all_stop = stop_words.union(extra)
-    # print('Prep corpus for tfidf...')
-    # prepped_corpus = prep_corpus(corpus)
-    
-    # vectorizer = TfidfVectorizer(stop_words=all_stop, strip_accents='ascii', ngram_range=(1,2), max_features=5000)
-    # X = vectorizer.fit_transform(prepped_corpus)
-    # print('Starting kMeans...')
-    # kmeans = KMeans(n_clusters=5, random_state=0) 
-    # kmeans.fit(X.toarray())
+
+    original, df = clean_training_dataframe('data/data.json') ## Entire dataset being trained
+    print('Making corpus...')
+    corpus = make_corpus(df)
+    stop_words = set(stopwords.words('english'))
+    extra = ['s', 'de', 'la', 'en', 'et', 'le', 'des', 'de la', 'les', 'vous', 'pour', 'rouen', 'us', 'dec', '00', '2013', '30', '10', 'us', 'www', 'new']
+    all_stop = stop_words.union(extra)
+    print('Prep corpus for tfidf...')
+    prepped_corpus = prep_corpus(corpus)
+
     print('Making modelling dataframe...')
-    # df_modelling = df.drop(['description', 'name', 'parsed_desc'], axis=1)
-    df_modelling = df.drop(['description', 'name'], axis=1)
+    df_modelling = df.drop(['description', 'name', 'parsed_desc'], axis=1)
+    # df_modelling = df.drop(['description', 'name'], axis=1)
+    df_modelling['percent_upper'] = [sum(1 for c in entry if c.isupper())/len(entry) if len(entry)>0 else np.NaN for entry in prepped_corpus]
+    df_modelling.dropna(how='any', inplace=True)
+    # Top 6 email domains.  one-hot encode whether or not a domain is in this list
+    # "gmail.com, yahoo.com, hotmail.com, aol.com, live.com, me.com" 
+    
+    df_modelling['common_domain'] = [('gmail' or 'yahoo' or 'live' or 'me' or 'hotmail' or 'aol') in entry for entry in df_modelling['email_domain']]
 
-    # df_modelling['cluster'] = kmeans.labels_  
-    # df_modelling = pd.get_dummies(df_modelling, columns=['cluster'], drop_first=True) 
-    y = df_modelling.pop('fraud') 
-    X = df_modelling.values
-    ss = StandardScaler()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
-    X_train_scaled = ss.fit_transform(X_train)
-    X_test_scaled = ss.transform(X_test)
-    if log_regression:
-        print('Starting Logistic Regression...')
-        lr = LogisticRegression(verbose=True, n_jobs=-1, class_weight='balanced')
-        lr.fit(X_train_scaled, y_train)
-        preds = lr.predict(X_train_scaled)
-        holdout_preds = lr.predict(X_test_scaled)
-        print(f"Training: F1: {f1_score(y_train, preds)}, Recall: {recall_score(y_train, preds)}, Accuracy: {lr.score(X_train_scaled, y_train)}, Precision: {precision_score(y_train, preds)}")
-        print(f"Test: F1: {f1_score(y_test, holdout_preds)}, Recall: {recall_score(y_test, holdout_preds)}, Accuracy: {lr.score(X_test_scaled, y_test)}, Precision: {precision_score(y_test, holdout_preds)}")
-    if randomforest:
-        print("Starting Random Forest...")
-        rf = RandomForestClassifier(class_weight='balanced', n_estimators=300, max_features=3, max_leaf_nodes=50, random_state=42, n_jobs=-2, oob_score=True)
-        rf.fit(X_train_scaled, y_train)
-        rfpreds = rf.predict(X_train_scaled)
-        holdout_preds_rf = rf.predict(X_test_scaled)
-        print(f"Training: \nF1: {f1_score(y_train, rfpreds)}, \nRecall: {recall_score(y_train, rfpreds)}, \nAccuracy: {rf.score(X_train_scaled, y_train)}, \nPrecision: {precision_score(y_train, rfpreds)}")
-        print(f"Test: \nF1: {f1_score(y_test, holdout_preds_rf)}, \nRecall: {recall_score(y_test, holdout_preds_rf)}, \nAccuracy: {lr.score(X_test_scaled, y_test)}, \nPrecision: {precision_score(y_test, holdout_preds_rf)}")
+    df_modelling.drop(columns='email_domain', axis=1, inplace=True)
+    df_modelling.to_pickle('data/fraud_data.pkl')   
 
-    model = rf.fit(X, y) ## Final model created
-
-    pickle_model = False
-    if pickle_model:
-        with open("model.pkl", 'wb') as f:
-            pickle.dump(model, f)
-
-
-
+          
 

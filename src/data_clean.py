@@ -8,9 +8,9 @@ def get_new_transaction():
     soup = BeautifulSoup(r.text, 'html.parser')
     top_split = soup.prettify().split('{')[1].split(',')
     bot_split = soup.prettify().split('{')[-1].split(',')
-    return top_split, bot_split
+    return soup, top_split, bot_split
 
-columns=['org_description',
+columns=['description',
         'has_logo',
         'listed', 
         'num_payouts',
@@ -21,18 +21,6 @@ columns=['org_description',
 
 df = pd.DataFrame(columns=columns)
 df = df.append({'has_logo':0 }, ignore_index=True)
-
-# def get_has_logo(df, top_split, row_num,
-#                  start_padding = 3, 
-#                  end_padding = 0,
-#                  col_str = "org_desc"):
-#     col_str_len = len(col_str)
-#     for feature in top_split:
-#         if col_str in feature:
-#             idx = feature.find(col_str)
-#             value = feature[start_padding + idx + col_str_len : len(feature)-end_padding]
-#             df.loc[row_num, col_str] = value
-#     return df
 
 def get_has_logo(df, top_split, row_num,
                  start_padding = 3, 
@@ -55,7 +43,10 @@ def get_listed(df, top_split, row_num,
         if col_str in feature:
             idx = feature.find(col_str)
             value = feature[start_padding + idx + col_str_len : len(feature)-end_padding]
-            df.loc[row_num, col_str] = value
+            if type(value)==type(True):
+                df.loc[row_num, col_str] = int(value)
+            else:
+                df.loc[row_num, col_str] = int(value=='y')
     return df
 
 def get_num_payouts(df, top_split, row_num,
@@ -118,11 +109,26 @@ def get_user_type(df, bot_split, row_num,
             df.loc[row_num, col_str] = value
     return df
 
+def get_desc(df, page_string, row_num,
+             start_padding = 2,
+             end_padding = 0,
+             desc_len_cutoff = 100,
+             col_str = "description"):
+    desc_start_loc = str(page_string.text).find('"description":')
+    desc_end_loc = str(page_string.text).find('"email_domain":')
+    desc_len = desc_end_loc - desc_start_loc
+    if desc_len >= desc_len_cutoff:
+        df.loc[row_num, col_str] = 1
+    else:
+        df.loc[row_num, col_str] = 0
+    return df
+
 def get_data():
     num_rows = 10
     for row_num in range(num_rows):
     #   check duplicate function and wait if true 
-        top_split, bot_split = get_new_transaction()
+        page_string, top_split, bot_split = get_new_transaction()
+        get_desc(df, page_string, row_num)
         get_has_logo(df, top_split, row_num)
         get_listed(df, top_split, row_num)
         get_num_payouts(df, top_split, row_num)
